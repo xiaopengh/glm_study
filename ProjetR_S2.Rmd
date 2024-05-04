@@ -1,0 +1,1060 @@
+---
+title: "Projet"
+author: "T"
+date: "2024-03-15"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+```{r}
+getwd()
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("kernlab")
+library(furniture) # For table1()
+library(dplyr) # For mutate()
+library(DMwR2) # For knnImputation()
+library(pROC) 
+library(sjPlot) # For tab_model(), plot_model()
+library(MASS)
+```
+
+## Présentation du jeu de données
+
+### Q1
+
+### Q2
+
+```{r,include = TRUE, echo = TRUE}
+data(spam)
+head(spam)
+spam$type <- factor(spam$type, levels = c("nonspam", "spam"))
+levels(spam$type)
+```
+
+```{r,message = FALSE}
+result_table <- table1(spam,splitby = ~ type,test = TRUE)
+print(result_table)
+rm(result_table)
+```
+
+
+**Conclusions:**
+
+1.  Hypothèse nulle $H_0$ pour chaque variable étant que celle-ci ne donne aucune information sur l'appartenance d'un individu observé (i.e la variable explicative est indépendante avec la variable catégorielle selon laquelle on classifie les individus en plusieurs groupes), les valeur-p du train $H_0$ pour la plupart des variables sont poutant inférieur à 0.01 ($p<0.01$), ce qui indique que l'observation est favorable à rejeter $H_0$ donnant ainsi légitimité à notre utilisation de ces données pour déterminer l'apptenance d'un individu entre les groupes "spam" et "nonspam" par la régression logistique
+
+2.Note sur comment le train est réalisé:
+
+Les explications dans la documentation indique que le train réalisé pour le jeu de donnée est un **T-train avec l'hypothèse de l'homogénéité de la variance**
+
+Pour savoir si ce choix est justifiable, on doit songer sur le train original que l'on a formulé - trainer si $X_i$ est indépendante de $Y$ avec $Y$ une variable bernouill (i.e $Y\sim\text{Bernouilli}(p)$).
+
+On souhaite donc savoir si $\forall B\in\mathcal{B}(\mathbb{R})$, $\mathbb{P}(\{X\in B\} \cap \{Y=1\}) = \mathbb{P}(X\in B)\mathbb{P}(Y=1)$. Cette formulation est équivalent à celle qui considère la probabilité conditionnelle $\mathbb{P}(X\in B|Y=1)=\mathbb{P}(X\in B)$. On remarque donc que si la loi de la nouvelle variable $X|Y=1$ est encore équivalente à celle de $X$, $H_0$ est donc vérifié.
+
+Pour trainer si $X$ et $X|Y=1$ suivent la même loi en s'appuyant sur l'hypothèse de l'homogénéité de la variance et de la normalité asymptotique de $X$, on réalise un T-train qui consiste à trainer si l'espérence de 2 variables est identique. Pour la simplification on suppose ici que l'espérence de $X$ est connue.
+
+## Présentation des méthodes
+
+### Q3
+
+**Explication:**
+
+La régression logistique binaire est une méthode statistique utilisée pour prédire l'appartenance à deux groupes (ou classes) basée sur une ou plusieurs variables indépendantes.
+
+-   **Fonction de lien** : La régression logistique utilise la fonction logit comme fonction de lien, qui relie les probabilités d'appartenance à une classe à une combinaison linéaire des variables indépendantes. La fonction logit transforme la probabilité $P(Y=1)$ en un espace illimité, facilitant l'estimation linéaire.
+
+-   **Estimation des valeurs** $\beta$ : Les coefficients $\beta$ du modèle sont estimés en maximisant la fonction de vraisemblance, généralement à travers la méthode du maximum de vraisemblance. Ces coefficients déterminent l'effet de chaque variable indépendante sur la probabilité d'appartenance à la classe ciblée.
+
+-   **Prédiction des valeurs de Y** : Avec les coefficients $\beta$ estimés, on peut prédire la probabilité qu'une observation appartienne à une classe donnée. Si cette probabilité dépasse un certain seuil (souvent 0,5), l'observation est classée dans cette catégorie.
+
+-   **Critères de qualité du modèle** : Plusieurs critères évaluent la capacité discriminante du modèle, c'est-à-dire sa capacité à bien classer les unités statistiques dans leur groupe d'appartenance. Parmi ces critères, l'Aire Sous la Courbe (AUC) de la courbe ROC, l'indice de Youden, la précision, le rappel, et le score F1 sont fréquemment utilisés pour juger de la performance du modèle.
+
+En résumé, la régression logistique binaire permet de modéliser la probabilité qu'une observation appartienne à l'une de deux catégories possibles, en se basant sur les valeurs de plusieurs variables prédictives.
+
+### Q4
+
+**Explication:** Dans le contexte de la régression logistique binaire, qui est utilisée pour classifier des observations en deux catégories, il existe plusieurs critères numériques pour évaluer les performances du classifieur. Voici une brève explication de trois critères clés : l'accuracy (taux de bonnes prédictions), la sensibilité, et la spécificité.
+
+-   **Accuracy (Taux de bonnes prédictions)**
+
+L'accuracy mesure la proportion totale de prédictions correctes par rapport au nombre total d'observations. C'est la mesure la plus intuitive des performances d'un classifieur. L'accuracy est calculée comme suit :
+
+$$ \text{Accuracy} = \frac{\text{Nombre de vrais positifs + Nombre de vrais  négatifs}}{\text{Nombre total d'observations}} $$
+
+Bien que l'accuracy soit facile à comprendre, elle peut être trompeuse dans des situations où les classes sont déséquilibrées (par exemple, quand une classe est beaucoup plus fréquente que l'autre).
+
+-   **Sensibilité (Taux de vrais positifs)**
+
+La sensibilité, également connue sous le nom de taux de vrais positifs ou rappel (recall), mesure la proportion d'observations réellement positives qui sont correctement identifiées par le modèle. Elle est particulièrement importante lorsque la capacité à détecter les cas positifs est critique. La sensibilité est calculée comme suit :
+
+$$ \text{Sensibilité} = \frac{\text{Nombre de vrais positifs}}{\text{Nombre de vrais positifs + Nombre de faux négatifs}} $$
+
+-   **Spécificité (Taux de vrais négatifs)**
+
+La spécificité mesure la proportion d'observations réellement négatives qui sont correctement identifiées comme telles par le modèle. Elle est essentielle lorsque la capacité à identifier correctement les non-cas est importante. La spécificité est calculée comme suit :
+
+$$ \text{Spécificité} = \frac{\text{Nombre de vrais négatifs}}{\text{Nombre de vrais négatifs + Nombre de faux positifs}} $$
+
+Ensemble, la sensibilité et la spécificité donnent une vue d'ensemble de la capacité du modèle à distinguer entre les deux classes. Il est souvent nécessaire de trouver un équilibre entre ces deux mesures, car améliorer l'une peut parfois se faire au détriment de l'autre.
+
+### Q5
+
+La courbe ROC et la valeur AUC sont des outils pour évaluer la performance des classifieurs binaires.
+
+-   **Courbe ROC** : Graphique qui montre la capacité d'un modèle à distinguer entre deux classes à différents seuils. L'axe Y représente la sensibilité (taux de vrais positifs), et l'axe X, 1 - la spécificité (taux de faux positifs).L'interprétation graphique en lien avec les critères numériques de la question 4 est que plus la courbe ROC est proche du coin supérieur gauche du graphique, meilleure est la performance du classificateur.
+
+-   **AUC (Area Under the Curve)** : L'AUC est l'aire sous la courbe ROC, avec des valeurs allant de 0 à 1. L'AUC offre une méthode quantitative pour évaluer la performance globale du modèle. Plus la valeur de l'AUC est élevée, meilleure est la performance de classification du modèle. Plus précisément, l'AUC peut être interprétée comme la probabilité que le modèle classe un exemple positif au-dessus d'un exemple négatif de manière aléatoire. Si l'AUC est de 0,5, cela signifie que le modèle n'a pas de capacité de discrimination, ce qui est équivalent à un choix aléatoire ; si l'AUC est proche de 1, cela indique que le modèle a une très bonne capacité de discrimination.
+
+-   **Critères de Hosmer et Lemeshow** : L'AUC permet de juger la qualité discriminatoire d'un modèle. Une AUC entre 0,5 et 0,7 est considérée comme faible, entre 0,7 et 0,8 comme acceptable, entre 0,8 et 0,9 comme excellente, et plus de 0,9 comme exceptionnelle.
+
+En bref, la courbe ROC et l'AUC offrent une évaluation visuelle et numérique de la capacité d'un modèle à séparer correctement les observations en deux catégories.
+
+## Génération de valeurs manquantes
+
+### Q6
+
+```{r, echo=FALSE}
+# Génération des valeurs maquantes 
+Fonction_MCAR <- function(data, taux_manquant){
+  n <- nrow(data)  
+  m <- ncol(data)-1
+  elements_totales <- n * m 
+  data_na <- data[,-ncol(data)]
+  
+  # éléments manquantes totales
+  nb_elements_manquants <- round(elements_totales * taux_manquant)
+  indice <- sample(elements_totales, nb_elements_manquants)
+  for (i in indice){
+    data_na[(i%/%(m+1))+1,i%%m+1] <- NA
+  }
+  data_na$type = data$type
+  return(data_na)
+}
+```
+
+
+```{r}
+# Génération des VMs aux taux différents
+data_5pc <- Fonction_MCAR(spam, 0.05)
+data_10pc <- Fonction_MCAR(spam, 0.10)
+data_15pc <- Fonction_MCAR(spam, 0.15)
+data_VM <- list(taux_5pc = data_5pc, 
+                taux_10pc = data_10pc,
+                taux_15pc = data_15pc)
+rm(data_5pc, data_10pc, data_15pc)
+```
+
+### Q7
+
+**Techniques d'implutation:**
+
+Pour la 1ère imputation, il s'agit de remplacer les VMs de chaque colonne par la moyenne empirique du colonne alors que la 2ème imputation utilise de plus l'algorithme de K plus proches voisins pour trouver K voisins de l'individu dont on cherche à imputer la VM d'un colonne. On remplace la VM par la moyenne empirique des valeurs sur le même colonne des K voisins.
+
+**Bibliothèques utilisées:**
+
+Pour mettre en oeuvre les imputations proposées, on doit changer les valeurs au seins d'un dataframe, ce qui nous conduit à utilier la fonction `mutate()` du package `dplyr`. Pourtant quant à la mise en oeuvre de l'imputation par K plus proche voisin, on pourrait utiliser le package `DMwR`, dans lequel se trouve la fonction `kNN()` qui peut éventuellement alléger les codes implémentés.
+
+Référence: «Data Mining with R: Learning with Case Studies»
+
+**Critère de qualité:**
+
+RMSE(Root Mean Square Error): Le RMSE est une mesure couramment utilisée pour évaluer la différence entre les valeurs prédites par un modèle et les valeurs réelles. Il donne une idée de la magnitude des erreurs de prédiction, avec un accent sur les grandes erreurs en raison de la mise au carré des écarts individuels.
+
+$$\text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}$$
+
+MAE(Mean absolute Error): Le MAE mesure la moyenne des valeurs absolues des erreurs entre les prédictions et les valeurs réelles. Contrairement au RMSE, le MAE donne une idée directe de l'erreur moyenne sans accorder plus d'importance aux grosses erreurs.
+
+$$\text{MAE} = \frac{1}{n} \sum_{i=1}^{n} |y_i - \hat{y}_i|$$
+
+R2(R squared): Le coefficient de détermination, souvent représenté par R2, est une mesure qui évalue la quantité de variance dans la variable dépendante qui peut être prédite à partir de la ou des variables indépendantes dans un modèle de . Cela nous donne une idée de la qualité de l'ajustement du modèle aux données observées.
+
+$$R^2 = 1 - \frac{\sum_{i=1}^{n} (y_i - \hat{y}_i)^2}{\sum_{i=1}^{n} (y_i - \bar{y})^2}\\ = 1-\frac{\text{RMSE}}{S^2}$$
+
+$$y_i\text{ : i-ième valeur observé}\\
+\bar{y} \text{ : la moyenne empirique}\\
+\hat{y} \text{ : prédiction de i-ème valeur selon le modèle}\\
+S^2 \text{ : la variance empirique}$$
+
+### Q8
+
+```{r}
+# les métriques mesurant l'erreur
+rmse = function(vrai, impute){
+  sqrt(mean((vrai-impute)^2))
+}
+
+mae = function(vrai, impute){
+  mean(abs(vrai-impute))
+}
+
+R2 = function(vrai, impute){
+  1 - mean((vrai-impute)^2)/var(as.numeric(vrai))
+}
+
+```
+
+```{r}
+# Procedure analyzing missing data  using 'average' or 'kNN' method
+imputation <- function(data, 
+                       data_VM,
+                       method = 'moyenne', k_voisins = 5){
+  n = ncol(data)
+  # 'average' method
+  if(method=='moyenne'){
+    data_5pc_impute <- data_VM$taux_5pc[,-n] %>%
+      mutate(across(everything(), 
+                    ~ifelse(is.na(.), mean(., trim = 0.5, na.rm = TRUE), .)))
+    data_10pc_impute <- data_VM$taux_10pc[,-n] %>%
+      mutate(across(everything(), 
+                    ~ifelse(is.na(.), mean(., trim = 0.5, na.rm = TRUE), .)))
+    data_15pc_impute <- data_VM$taux_15pc[,-n] %>%
+      mutate(across(everything(), 
+                    ~ifelse(is.na(.), mean(., trim = 0.5, na.rm = TRUE), .)))
+    data_5pc_impute$type <- data$type
+    data_10pc_impute$type <- data$type
+    data_15pc_impute$type <- data$type
+  }
+    
+  # 'kNN' method
+  else{
+    data_5pc_impute <- knnImputation(data_VM$taux_5pc[,-n], 
+                                     k = k_voisins)
+    data_10pc_impute <- knnImputation(data_VM$taux_10pc[,-n], 
+                                      k = k_voisins)
+    data_15pc_impute <- knnImputation(data_VM$taux_15pc[,-n], 
+                                      k = k_voisins)
+    data_5pc_impute$type <- data$type
+    data_10pc_impute$type <- data$type
+    data_15pc_impute$type <- data$type
+  }
+  
+  return(list(taux_5pc = data_5pc_impute, 
+              taux_10pc = data_10pc_impute, 
+              taux_15pc = data_15pc_impute))
+}
+```
+
+```{r}
+metrique.VM <- function(data, 
+                        data_impute){
+  n = ncol(data)
+  data_5pc_impute <- data_impute$taux_5pc[,-n]
+  data_10pc_impute <- data_impute$taux_10pc[,-n]
+  data_15pc_impute <- data_impute$taux_15pc[,-n]
+#calcul de la qualité d'imputation par variable.
+  data_5pc_impute_rmse <- sapply(names(data), function(col){
+    rmse(data[[col]], data_5pc_impute[[col]])
+  })
+  data_5pc_impute_mae <- sapply(names(data), function(col){
+    mae(data[[col]], data_5pc_impute[[col]])
+  })
+  data_5pc_impute_R2 <- sapply(names(data), function(col){
+    R2(data[[col]], data_5pc_impute[[col]])
+  })
+  
+  data_10pc_impute_rmse <- sapply(names(data), function(col){
+    rmse(data[[col]], data_10pc_impute[[col]])
+  })
+  data_10pc_impute_mae <- sapply(names(data), function(col){
+    mae(data[[col]], data_10pc_impute[[col]])
+  })
+  data_10pc_impute_R2 <- sapply(names(data), function(col){
+    R2(data[[col]], data_10pc_impute[[col]])
+  })
+  
+  data_15pc_impute_rmse <- sapply(names(data), function(col){
+    rmse(data[[col]], data_15pc_impute[[col]])
+  })
+  data_15pc_impute_mae <- sapply(names(data), function(col){
+    mae(data[[col]], data_15pc_impute[[col]])
+  })
+  data_15pc_impute_R2 <- sapply(names(data), function(col){
+    R2(data[[col]], data_15pc_impute[[col]])
+  })
+  
+  
+  # calcul de la qualité moyenne des variables.  
+  rmse_5pc <- data_5pc_impute_rmse %>% na.omit() %>% mean()
+  mae_5pc <- data_5pc_impute_mae %>% na.omit() %>% mean()
+  R2_5pc <- data_5pc_impute_R2 %>% na.omit() %>% mean()
+  a <- c(rmse_5pc, mae_5pc, R2_5pc)
+  
+  rmse_10pc <- data_10pc_impute_rmse %>% na.omit() %>% mean()
+  mae_10pc <- data_10pc_impute_mae %>% na.omit() %>% mean()
+  R2_10pc <- data_10pc_impute_R2 %>% na.omit() %>% mean()
+  b <- c(rmse_10pc, mae_10pc, R2_10pc)
+  
+  rmse_15pc <- data_15pc_impute_rmse %>% na.omit() %>% mean()
+  mae_15pc <- data_15pc_impute_mae %>% na.omit() %>% mean()
+  R2_15pc <- data_15pc_impute_R2 %>% na.omit() %>% mean()
+  c <- c(rmse_15pc, mae_15pc, R2_15pc)
+  
+  imputation <- data.frame(a,b,c,row.names = c('rmse', 'mae', 'R2'))
+  colnames(imputation) <- c('5pc','10pc','15pc')
+  return(imputation)
+}
+```
+
+```{r,warning=FALSE}
+
+data_impute_moyenne <- imputation(data = spam,
+                                  data_VM = data_VM,
+                                  method = 'moyenne')
+data_impute_knn <- imputation(data = spam,
+                                  data_VM = data_VM,
+                                  method = 'knn')
+```
+
+```{r,warning = FALSE}
+# Tableau sur les métriques mesurant erreur des imputations 
+metrique.VM(data = spam,
+            data_impute = data_impute_knn)
+metrique.VM(data = spam,
+            data_impute = data_impute_moyenne)
+```
+
+
+### Q9
+
+```{r}
+# Function to calculate variance across a list of matrices at each position
+elementwise_variance <- function(matrix_list) {
+  # Assume all matrices have the same dimensions
+  n_rows <- nrow(matrix_list[[1]])
+  n_cols <- ncol(matrix_list[[1]])
+  
+  # Create a matrix to store the variances
+  variance_matrix <- matrix(nrow = n_rows, ncol = n_cols)
+  
+  # Loop through each element
+  for (i in 1:n_rows) {
+    for (j in 1:n_cols) {
+      # Extract the same element from each matrix
+      elements <- sapply(matrix_list, function(x) x[i, j])
+      # Calculate the variance of these elements
+      variance_matrix[i, j] <- var(elements)
+    }
+  }
+  return(variance_matrix)
+}
+```
+
+
+```{r}
+# Pour faciliter l'analyse, on crée une fonction qui enboîte génération, imputation et métrique. 
+
+Analyse_VMs <- function(data, n_experience=3){
+  liste_metrique_moyenne <- vector('list', n_experience)
+  liste_metrique_knn <- vector('list', n_experience)
+  # As R systematically resets the random seed, their is no need to set a different seed for each loop to guarantee the randomness of the NA generation 
+  for(i in 1:n_experience){
+    # Génération des valeurs manquantes 
+    data_5pc <- Fonction_MCAR(data, 0.05)
+    data_10pc <- Fonction_MCAR(data, 0.10)
+    data_15pc <- Fonction_MCAR(data, 0.15)
+    data_VM <- list(taux_5pc = data_5pc, 
+                taux_10pc = data_10pc,
+                taux_15pc = data_15pc)
+    
+    # Imputation par la méthode moyenne
+    data_impute_moyenne <- imputation(data = data,
+                                      data_VM = data_VM,
+                                      method = 'moyenne')
+    # Ajout d'un résultat métrique de qualité de l'imputation dans liste
+    liste_metrique_moyenne[[i]] <- as.matrix(metrique.VM(data = data, 
+                                                         data_impute = data_impute_moyenne))
+    
+    # Imputation par la méthode kNN
+    data_impute_knn <- imputation(data = data,
+                                  data_VM = data_VM,
+                                  method = 'knn')
+    # Ajout d'un résultat métrique de qualité de l'imputation dans liste
+    liste_metrique_knn[[i]] <- as.matrix(metrique.VM(data = data, 
+                                                     data_impute = data_impute_knn))
+  }
+  
+  column_names <- c('5pc','10pc','15pc')
+  row_names <- c('rmse', 'mae', 'R2')
+  ave_metrique_moyenne <- (1/n_experience)*Reduce('+', liste_metrique_moyenne)
+  ave_metrique_knn <- (1/n_experience)*Reduce('+', liste_metrique_knn)
+  var_metrique_moyenne <- elementwise_variance(liste_metrique_moyenne)
+  colnames(var_metrique_moyenne) <- column_names
+  rownames(var_metrique_moyenne) <- row_names
+  var_metrique_knn <- elementwise_variance(liste_metrique_knn)
+  colnames(var_metrique_knn) <- column_names
+  rownames(var_metrique_knn) <- row_names
+  return(list(kNN = list(ave = ave_metrique_knn,
+                         var = var_metrique_knn), 
+              moyenne = list(ave = ave_metrique_moyenne,
+                             var = var_metrique_moyenne)))
+}
+```
+
+```{r, warning=FALSE}
+# test chunk for the longer result 
+start_time <- Sys.time()
+Analyse_VMs(data = spam, n_experience = 3)
+end_time <- Sys.time()
+print(end_time - start_time)
+```
+
+
+```{r, warning=FALSE}
+# Start timing
+start_time <- Sys.time()
+# Long enough
+VM_results <- Analyse_VMs(data = spam, n_experience = 100)
+save(VM_results, file = "VM_results.Rdata")
+# End timing
+end_time <- Sys.time()
+# Calculate duration
+duration <- end_time - start_time
+print(duration)
+```
+
+```{r}
+VM_results
+```
+
+## Régression logistique (glm)
+
+```{r}
+# Data wrangling & Train test split
+n<-nrow(spam)
+# Using sample(n) for a specific set.seed(n=seed) deter
+shuffled_indices<-sample(n)
+split_point<-round(0.8*n)
+indices_train<-shuffled_indices[1:split_point]
+indices_test<-shuffled_indices[(split_point+1):n]
+#indices_train <- sort(indices_train)
+#indices_test <- sort(indices_test)
+rm(n, shuffled_indices, split_point)
+
+# Données train et train pour tableau initial
+spam_train <- spam[indices_train,]
+spam_test <- spam[indices_test,]
+```
+
+
+```{r,warning=FALSE}
+# Données train  pour tableau imputé de méthode "moyenne"
+data_impute_moyenne_5pc_train <-  data_impute_moyenne$taux_5pc[indices_train,]
+data_impute_moyenne_10pc_train <-  data_impute_moyenne$taux_10pc[indices_train,]
+data_impute_moyenne_15pc_train <-  data_impute_moyenne$taux_15pc[indices_train,]
+
+# Jeu de données train
+data_impute_moyenne_5pc_test <-  data_impute_moyenne$taux_5pc[indices_test,]
+data_impute_moyenne_10pc_test <-  data_impute_moyenne$taux_10pc[indices_test,]
+data_impute_moyenne_15pc_test <-  data_impute_moyenne$taux_15pc[indices_test,]
+
+
+# Données train pour tableau imputé de méthode "knn"
+data_impute_knn_5pc_train <-  data_impute_knn$taux_5pc[indices_train,]
+data_impute_knn_10pc_train <-  data_impute_knn$taux_10pc[indices_train,]
+data_impute_knn_15pc_train <-  data_impute_knn$taux_15pc[indices_train,]
+
+# Jeu de données train
+data_impute_knn_5pc_test <-  data_impute_knn$taux_5pc[indices_test,]
+data_impute_knn_10pc_test <-  data_impute_knn$taux_10pc[indices_test,]
+data_impute_knn_15pc_test <-  data_impute_knn$taux_15pc[indices_test,]
+
+modeling_data <- list(train = list(origin = spam_train,
+                                   moyenne = list(
+                                     taux_5pc = data_impute_moyenne_5pc_train,
+                                     taux_10pc = data_impute_moyenne_10pc_train,
+                                     taux_15pc = data_impute_moyenne_15pc_train),
+                                   knn = list(
+                                     taux_5pc = data_impute_knn_5pc_train,
+                                     taux_10pc = data_impute_knn_10pc_train,
+                                     taux_15pc = data_impute_knn_15pc_train)
+                                   ),
+                      test = list(origin = spam_test,
+                                   moyenne = list(
+                                     taux_5pc = data_impute_moyenne_5pc_test,
+                                     taux_10pc = data_impute_moyenne_10pc_test,
+                                     taux_15pc = data_impute_moyenne_15pc_test),
+                                   knn = list(
+                                     taux_5pc = data_impute_knn_5pc_test,
+                                     taux_10pc = data_impute_knn_10pc_test,
+                                     taux_15pc = data_impute_knn_15pc_test)
+                                  )
+                      )
+rm(data_impute_moyenne_5pc_train, 
+   data_impute_moyenne_10pc_train,
+   data_impute_moyenne_15pc_train,
+   data_impute_knn_5pc_train,
+   data_impute_knn_10pc_train,
+   data_impute_knn_15pc_train,
+   spam_train,
+   data_impute_moyenne_5pc_test,
+   data_impute_moyenne_10pc_test,
+   data_impute_moyenne_15pc_test,
+   data_impute_knn_5pc_test,
+   data_impute_knn_10pc_test,
+   data_impute_knn_15pc_test,
+   spam_test)
+
+# On construit des modèles avec 'glm'
+
+mod_spam_train <- glm(type~. , data = modeling_data$train$origin , family=binomial)
+
+mod_knn_5pc_train <- glm(type~. , 
+                         data = modeling_data$train$knn$taux_5pc,
+                         family = binomial)
+mod_knn_10pc_train <- glm(type~. ,
+                          data = modeling_data$train$knn$taux_10pc,
+                          family = binomial)
+mod_knn_15pc_train <- glm(type~. ,
+                          data = modeling_data$train$knn$taux_15pc,
+                          family = binomial)
+
+mod_moyenne_5pc_train <- glm(type~. ,
+                             data = modeling_data$train$moyenne$taux_5pc,
+                             family = binomial)
+mod_moyenne_10pc_train <- glm(type~. ,
+                              data = modeling_data$train$moyenne$taux_10pc,
+                              family = binomial)
+mod_moyenne_15pc_train <- glm(type~. ,
+                              data = modeling_data$train$moyenne$taux_15pc,
+                              family = binomial)
+```
+
+### Q10 et Q11
+
+```{r,warning = FLASE}
+comparaison <- tab_model(mod_spam_train,
+                         mod_moyenne_15pc_train,
+                         mod_moyenne_5pc_train,
+                         mod_knn_15pc_train,
+                         mod_knn_5pc_train, 
+                         show.se = TRUE, show.std = TRUE, show.stat = TRUE,
+                         dv.labels = c( "origin",
+                                        "imputation_moyenne_15pc",
+                                        "imputation_moyenne_5pc",
+                                        "imputation_knn_15pc",
+                                        "imputation_knn_5pc" ))
+```
+
+```{r}
+# Write HTML content to a file
+html_file <- "model_comparaison.html"
+writeLines(as.character(comparaison), con = html_file)
+comparaison
+rm(html_file)
+```
+
+**Explication :**
+
+Le odds ratio (OR) est une mesure de l'association entre une variable prédictive et la probabilité d'un résultat particulier. Il représente la façon dont les chances d'obtenir un résultat changent avec une augmentation d'une unité de la variable prédictive, les autres variables restant constantes. Le odds ratio (OR) est un concept clé de la régression logistique car il fournit une mesure directe et interprétable de l'ampleur de l'effet associé aux variables prédictives.
+
+$$
+\text{Odds} = \frac{p}{1-p}\\
+\log\left(\frac{p}{1 - p}\right) = \beta_0 + \beta_1x_1 + \cdots + \beta_kx_k\\
+\text{Odds Ratio} = e^{\beta_i}
+$$
+
+Les "odds ratios" sont la forme exponentielle des coefficients et fournissent une explication plus intuitive : pour chaque unité augmentée de la variable prédictive, le rapport des chances que l'événement se produise par rapport à ce qu'il ne se produise pas est multiplié par combien. Ainsi, nous pouvons voir de manière intuitive quelles variables sont significatives et l'impact de chaque variable significative sur la probabilité de l'événement lorsqu'elle change d'une unité.
+
+### Q12
+
+```{r, warning=FALSE}
+# Model generation using train set
+model <- glm(type ~ . , data = modeling_data$train$origin, family = binomial)
+#summary(model)
+
+# Making predictions
+predictions <- predict(model, 
+                       newdata = 
+                         modeling_data$test$origin[,-ncol(modeling_data$test$origin)],
+                       type = "response")
+
+# Transforming logistic function value to predicted binary results (if p>0.5 then type=1)
+test_result <- modeling_data$test$origin
+test_result$predicted <- ifelse(predictions>0.5, 1, 0)
+test_result$response <- predictions
+conf_matrix <- table(Predicted = test_result$predicted,
+                     Actual = test_result$type)
+conf_matrix
+rm(predictions, conf_matrix, model, test_result)
+```
+
+
+```{r}
+Prediction <- function(modele,test){
+    test_results <- test
+    predicted_probs<-predict(modele, newdata = test[,-ncol(test)] ,type="response")
+    # here, 1 means spam 0 means nonspam
+    test_results$predicted_class<-ifelse(predicted_probs>0.5, 1, 0)
+    test_results$response <- predicted_probs
+    
+    conf_matrix<-table(Predicted=test_results$predicted_class,
+                       Actual=test$type)
+    
+    accuracy<-sum(diag(conf_matrix))/sum(conf_matrix)
+    #print(paste("Accuracy: ",accuracy))
+    
+    sensitivity<-conf_matrix[2,2]/sum(conf_matrix[2,])
+    #print(paste("Sensitivity: ",sensitivity))
+    
+    specificity<-conf_matrix[1,1]/sum(conf_matrix[1,])
+    #print(paste("Specificity: ",specificity))
+    
+    taux <- data.frame(
+      Accuracy = accuracy,
+      Sensitivity = sensitivity,
+      Specificity = specificity
+    )
+    
+    return(list(test_results = test_results,
+                Matrice_Confusion = conf_matrix,
+                Taux = taux))
+}
+```
+
+
+```{r}
+# Pour homogenéité des variables 
+data_impute_moyenne_5pc_train <- modeling_data$train$moyenne$taux_5pc
+data_impute_moyenne_10pc_train <- modeling_data$train$moyenne$taux_10pc
+data_impute_moyenne_15pc_train <- modeling_data$train$moyenne$taux_15pc
+data_impute_knn_5pc_train <- modeling_data$train$knn$taux_5pc
+data_impute_knn_10pc_train <- modeling_data$train$knn$taux_10pc
+data_impute_knn_15pc_train <- modeling_data$train$knn$taux_15pc
+spam_train <- modeling_data$train$origin
+data_impute_moyenne_5pc_test <- modeling_data$test$moyenne$taux_5pc
+data_impute_moyenne_10pc_test <- modeling_data$test$moyenne$taux_10pc
+data_impute_moyenne_15pc_test <- modeling_data$test$moyenne$taux_15pc
+data_impute_knn_5pc_test <- modeling_data$test$knn$taux_5pc
+data_impute_knn_10pc_test <- modeling_data$test$knn$taux_10pc
+data_impute_knn_15pc_test <- modeling_data$test$knn$taux_15pc
+spam_test <- modeling_data$test$origin
+```
+
+
+```{r}
+pred_spam_train = Prediction(mod_spam_train,spam_train)
+pred_spam_train$Matrice_Confusion
+pred_spam_train$Taux
+
+pred_knn5pc_train = Prediction(mod_knn_5pc_train,data_impute_knn_5pc_train)
+pred_knn10pc_train = Prediction(mod_knn_10pc_train,data_impute_knn_10pc_train)
+pred_knn15pc_train = Prediction(mod_knn_15pc_train,data_impute_knn_15pc_train)
+
+
+pred_moyenne5pc_train = Prediction(mod_moyenne_5pc_train,data_impute_moyenne_5pc_train)
+pred_moyenne10pc_train = Prediction(mod_moyenne_10pc_train,data_impute_moyenne_10pc_train)
+pred_moyenne15pc_train = Prediction(mod_moyenne_15pc_train,data_impute_moyenne_15pc_train)
+
+```
+
+```{r}
+rm(data_impute_moyenne_5pc_train, 
+   data_impute_moyenne_10pc_train,
+   data_impute_moyenne_15pc_train,
+   data_impute_knn_5pc_train,
+   data_impute_knn_10pc_train,
+   data_impute_knn_15pc_train,
+   spam_train,
+   data_impute_moyenne_5pc_test,
+   data_impute_moyenne_10pc_test,
+   data_impute_moyenne_15pc_test,
+   data_impute_knn_5pc_test,
+   data_impute_knn_10pc_test,
+   data_impute_knn_15pc_test,
+   spam_test)
+```
+
+
+
+
+
+
+
+
+
+
+### Q13
+```{r}
+# Pour homogenéité des variables 
+data_impute_moyenne_5pc_train <- modeling_data$train$moyenne$taux_5pc
+data_impute_moyenne_10pc_train <- modeling_data$train$moyenne$taux_10pc
+data_impute_moyenne_15pc_train <- modeling_data$train$moyenne$taux_15pc
+data_impute_knn_5pc_train <- modeling_data$train$knn$taux_5pc
+data_impute_knn_10pc_train <- modeling_data$train$knn$taux_10pc
+data_impute_knn_15pc_train <- modeling_data$train$knn$taux_15pc
+spam_train <- modeling_data$train$origin
+data_impute_moyenne_5pc_test <- modeling_data$test$moyenne$taux_5pc
+data_impute_moyenne_10pc_test <- modeling_data$test$moyenne$taux_10pc
+data_impute_moyenne_15pc_test <- modeling_data$test$moyenne$taux_15pc
+data_impute_knn_5pc_test <- modeling_data$test$knn$taux_5pc
+data_impute_knn_10pc_test <- modeling_data$test$knn$taux_10pc
+data_impute_knn_15pc_test <- modeling_data$test$knn$taux_15pc
+spam_test <- modeling_data$test$origin
+```
+
+
+```{r}
+if(!requireNamespace("pROC",quietly=TRUE)){
+    install.packages("pROC")
+}
+
+ROC_AUC_Youden_Closet <- function(modele,data){
+  predicted_probs<-predict(modele,data,type="response")
+  roc_obj<-roc(response=data$type,predictor=predicted_probs,levels=c("nonspam","spam"))
+  #plot(roc_obj,main="ROC Curve")
+  auc_value<-auc(roc_obj)
+  #print(paste("AUC:",auc_value))
+  
+  
+  optimal_youden<-coords(roc_obj,"best",ret="threshold",best.method="youden")
+  optimal_threshold_youden<-optimal_youden[1]
+  sensitivity_youden<-coords(roc_obj,"best",ret="sensitivity",best.method="youden")
+  specificity_youden<-coords(roc_obj,"best",ret="specificity",best.method="youden")
+  
+  
+  optimal_closest<-coords(roc_obj,"best",ret="threshold",best.method="closest.topleft")
+  optimal_threshold_closest<-optimal_closest[1]
+  sensitivity_closest<-coords(roc_obj,"best",ret="sensitivity",best.method="closest.topleft")
+  specificity_closest<-coords(roc_obj,"best",ret="specificity",best.method="closest.topleft")
+  
+  
+  Youden <- data.frame(
+    Seuil_optim = optimal_threshold_youden,
+    Sensitivity = sensitivity_youden,
+    Specificity = specificity_youden
+  )
+  
+  
+  Closet <- data.frame(
+    Seuil_optim = optimal_threshold_closest,
+    Sensitivity = sensitivity_closest,
+    Specificity = specificity_closest
+  )
+  return(list(AUC = auc_value,
+              ROC = roc_obj,
+              Youden = Youden,
+              Closet = Closet))
+}
+```
+
+```{r,message=FALSE}
+appli_spam_train <- ROC_AUC_Youden_Closet(mod_spam_train,spam_train)
+appli_knn5pc_train <- ROC_AUC_Youden_Closet(mod_knn_5pc_train,data_impute_knn_5pc_train)
+appli_knn10pc_train <- ROC_AUC_Youden_Closet(mod_knn_10pc_train,data_impute_knn_10pc_train)
+appli_knn15pc_train <- ROC_AUC_Youden_Closet(mod_knn_15pc_train,data_impute_knn_15pc_train)
+appli_moyenne5pc_train <- ROC_AUC_Youden_Closet(mod_moyenne_5pc_train,data_impute_moyenne_5pc_train)
+appli_moyenne10pc_train <- ROC_AUC_Youden_Closet(mod_moyenne_10pc_train,data_impute_moyenne_10pc_train)
+appli_moyenne15pc_train <- ROC_AUC_Youden_Closet(mod_moyenne_15pc_train,data_impute_moyenne_15pc_train)
+
+```
+
+**Les dessins de 7 tableaux de donées train**
+
+```{r}
+ROC_spam_train <- appli_spam_train$ROC
+
+ROC_knn5pc_train <- appli_knn5pc_train$ROC
+ROC_knn10pc_train <- appli_knn10pc_train$ROC
+ROC_knn15pc_train <- appli_knn15pc_train$ROC
+
+ROC_moyenne5pc_train <- appli_moyenne5pc_train$ROC
+ROC_moyenne10pc_train <- appli_moyenne10pc_train$ROC
+ROC_moyenne15pc_train <- appli_moyenne15pc_train$ROC
+
+plot(ROC_spam_train,main="ROC Curve de donées train de tableua initial")
+```
+
+```{r,echo = FALSE,fig.width=6, fig.height=3}
+par(mfrow=c(1, 3))
+plot(ROC_knn5pc_train,main="ROC Curve de donées train de knn 5pc")
+plot(ROC_knn10pc_train,main="ROC Curve de donées train de knn 10pc")
+plot(ROC_knn15pc_train,main="ROC Curve de donées train de knn 15pc")
+```
+
+```{r,echo = FALSE,fig.width=6, fig.height=3}
+par(mfrow=c(1, 3))
+plot(ROC_moyenne5pc_train,main="ROC Curve de donées train de moyenne 5pc")
+plot(ROC_moyenne10pc_train,main="ROC Curve de donées train de moyenne 10pc")
+plot(ROC_moyenne15pc_train,main="ROC Curve de donées train de moyenne 15pc")
+par(mfrow=c(1, 1))
+
+```
+
+### Q14
+
+```{r}
+pred_spam_test = Prediction(mod_spam_train,spam_test)
+print(pred_spam_test$Matrice_Confusion)
+pred_spam_test$Taux
+
+pred_knn5pc_test = Prediction(mod_knn_5pc_train,data_impute_knn_5pc_test)
+pred_knn10pc_test = Prediction(mod_knn_10pc_train,data_impute_knn_10pc_test)
+pred_knn15pc_test = Prediction(mod_knn_15pc_train,data_impute_knn_15pc_test)
+
+
+pred_moyenne5pc_test = Prediction(mod_moyenne_5pc_train,data_impute_moyenne_5pc_test)
+pred_moyenne10pc_test = Prediction(mod_moyenne_10pc_train,data_impute_moyenne_10pc_test)
+pred_moyenne15pc_test = Prediction(mod_moyenne_15pc_train,data_impute_moyenne_15pc_test)
+
+```
+
+### Q15
+
+```{r,message=FALSE}
+appli_spam_test <- ROC_AUC_Youden_Closet(mod_spam_train,spam_test)
+appli_knn5pc_test <- ROC_AUC_Youden_Closet(mod_knn_5pc_train,data_impute_knn_5pc_test)
+appli_knn10pc_test <- ROC_AUC_Youden_Closet(mod_knn_10pc_train,data_impute_knn_10pc_test)
+appli_knn15pc_test <- ROC_AUC_Youden_Closet(mod_knn_15pc_train,data_impute_knn_15pc_test)
+appli_moyenne5pc_test <- ROC_AUC_Youden_Closet(mod_moyenne_5pc_train,data_impute_moyenne_5pc_test)
+appli_moyenne10pc_test <- ROC_AUC_Youden_Closet(mod_moyenne_10pc_train,data_impute_moyenne_10pc_test)
+appli_moyenne15pc_test <- ROC_AUC_Youden_Closet(mod_moyenne_15pc_train,data_impute_moyenne_15pc_test)
+
+```
+
+**Les dessins de 7 tableaux de donées test**
+
+```{r}
+ROC_spam_test <- appli_spam_test$ROC
+
+ROC_knn5pc_test <- appli_knn5pc_test$ROC
+ROC_knn10pc_test <- appli_knn10pc_test$ROC
+ROC_knn15pc_test <- appli_knn15pc_test$ROC
+
+ROC_moyenne5pc_test <- appli_moyenne5pc_test$ROC
+ROC_moyenne10pc_test <- appli_moyenne10pc_test$ROC
+ROC_moyenne15pc_test <- appli_moyenne15pc_test$ROC
+
+plot(ROC_spam_test,main="ROC Curve de donées test de tableua initial")
+```
+
+```{r,echo = FALSE,fig.width=6, fig.height=3}
+par(mfrow=c(1, 3))
+plot(ROC_knn5pc_test,main="ROC Curve de donées test de knn 5pc")
+plot(ROC_knn10pc_test,main="ROC Curve de donées test de knn 10pc")
+plot(ROC_knn15pc_test,main="ROC Curve de donées test de knn 15pc")
+```
+
+```{r,echo = FALSE,fig.width=6, fig.height=3}
+par(mfrow=c(1, 3))
+plot(ROC_moyenne5pc_test,main="ROC Curve de donées test de moyenne 5pc")
+plot(ROC_moyenne10pc_test,main="ROC Curve de donées test de moyenne 10pc")
+plot(ROC_moyenne15pc_test,main="ROC Curve de donées test de moyenne 15pc")
+par(mfrow=c(1, 1))
+
+```
+
+
+
+### Q16
+
+
+**On fait d'abbord pour les donées d'apprentissage**
+
+```{r}
+AICmod <- function(modele){
+  # Bakcward
+  mod_backward <- stepAIC(modele, direction = "backward",trace =0)
+  
+  # Forward
+  mod_forward <- stepAIC(modele, direction = "forward", scope = list(lower = ~1, upper = ~ .),trace =0)
+  
+  # Both
+  mod_both <- stepAIC(modele, direction = "both",trace =0)
+  
+  troismethode <- list(Backward = mod_backward,Forward = mod_forward,Both = mod_both)
+  
+  return(troismethode)
+}
+```
+
+```{r,warning=FALSE}
+AICmod_spam_train <- AICmod(mod_spam_train)
+
+AICmod_knn5pc_train <- AICmod(mod_knn_5pc_train)
+AICmod_knn10pc_train <- AICmod(mod_knn_10pc_train)
+AICmod_knn15pc_train <- AICmod(mod_knn_15pc_train)
+
+AICmod_moyenne5pc_train <- AICmod(mod_moyenne_5pc_train)
+AICmod_moyenne10pc_train <- AICmod(mod_moyenne_10pc_train)
+AICmod_moyenne15pc_train <- AICmod(mod_moyenne_15pc_train)
+
+#View(AICmod_spam_train$Backward$coefficients)
+#summary(AICmod_spam_train$Backward)
+#names(AICmod_spam_train$Backward$coefficients)
+
+```
+
+
+
+```{r}
+consensus <- function(modele){
+  name_backward <- names(modele$Backward$coefficients)
+  name_forward <-  names(modele$Forward$coefficients)
+  name_both <-  names(modele$Both$coefficients)
+  
+  name_commun <- Reduce(intersect, list(name_backward,name_forward,name_both))
+  
+  meme <- identical(name_backward,name_commun) && identical(name_forward,name_commun) && identical(name_both,name_commun)
+  
+  modele_name <- deparse(substitute(modele)) #Pour obtenir le nom du modèle
+  if(meme){
+    out <- sprintf("Les trois approches pour  modèle ** %s ** sélectionnent les mêmes noms de variables ",modele_name)
+    print(out)
+  }else{
+    out <- sprintf("Les trois approches pour  modèle ** %s **  n'ont pas de consensus ",modele_name)
+    print(out)
+  }
+}
+
+consensus(AICmod_spam_train)
+
+consensus(AICmod_knn5pc_train)
+consensus(AICmod_knn10pc_train)
+consensus(AICmod_knn15pc_train)
+
+consensus(AICmod_moyenne5pc_train)
+consensus(AICmod_moyenne10pc_train)
+consensus(AICmod_moyenne15pc_train)
+
+```
+
+```{r}
+# La plus petite valeur de AIC
+
+minAIC_mod <- function(modele){
+  aic_val <- c(modele$Backward$aic,modele$Forward$aic,modele$Both$aic)
+  
+  min_indice <- which.min(aic_val)
+  
+  modele_noms <- c("Backward","Forward","Both")
+  seletion_nom <- modele_noms[min_indice]
+  
+  selection_modele <- modele[[seletion_nom]]
+  
+  return(selection_modele)
+}
+
+minAIC_spam_train <- minAIC_mod(AICmod_spam_train)
+
+minAIC_knn5pc_train <- minAIC_mod(AICmod_knn5pc_train)
+minAIC_knn10pc_train <- minAIC_mod(AICmod_knn10pc_train)
+minAIC_knn15pc_train <- minAIC_mod(AICmod_knn15pc_train)
+
+minAIC_moyenne5pc_train <- minAIC_mod(AICmod_moyenne5pc_train)
+minAIC_moyenne10pc_train <- minAIC_mod(AICmod_moyenne10pc_train)
+minAIC_moyenne15pc_train <- minAIC_mod(AICmod_moyenne15pc_train)
+
+#View(minAIC_knn5pc_train)
+```
+
+### Q17
+
+**Les ROC courbes pour donées train**
+```{r}
+# Dataframes avec ROC_AUC_Youden_Closet
+minAIC_appli_spam_train <- ROC_AUC_Youden_Closet(minAIC_spam_train,spam_train)
+
+minAIC_appli_knn5pc_train <- ROC_AUC_Youden_Closet(minAIC_knn5pc_train,data_impute_knn_5pc_train)
+
+minAIC_appli_knn10pc_train <- ROC_AUC_Youden_Closet(minAIC_knn10pc_train,data_impute_knn_10pc_train)
+
+minAIC_appli_knn15pc_train <- ROC_AUC_Youden_Closet(minAIC_knn15pc_train,data_impute_knn_15pc_train)
+
+minAIC_appli_moyenne5pc_train <- ROC_AUC_Youden_Closet(minAIC_moyenne5pc_train,data_impute_moyenne_5pc_train)
+
+minAIC_appli_moyenne10pc_train <- ROC_AUC_Youden_Closet(minAIC_moyenne10pc_train,data_impute_moyenne_10pc_train)
+
+minAIC_appli_moyenne15pc_train <- ROC_AUC_Youden_Closet(minAIC_moyenne15pc_train,data_impute_moyenne_15pc_train)
+
+
+
+
+
+# Les ROCs
+minAIC_ROC_spam_train <- minAIC_appli_spam_train$ROC
+
+minAIC_ROC_knn5pc_train <- minAIC_appli_knn5pc_train$ROC
+minAIC_ROC_knn10pc_train <- minAIC_appli_knn5pc_train$ROC
+minAIC_ROC_knn15pc_train <- minAIC_appli_knn5pc_train$ROC
+
+minAIC_ROC_moyenne5pc_train <- minAIC_appli_moyenne5pc_train$ROC
+minAIC_ROC_moyenne10pc_train <- minAIC_appli_moyenne5pc_train$ROC
+minAIC_ROC_moyenne15pc_train <- minAIC_appli_moyenne5pc_train$ROC
+
+plot(minAIC_ROC_spam_train,main="ROC Curve de donées train sélectioné par le plus petit AIC entre 3 méthodes de tableua initial")
+```
+
+```{r,echo = FALSE,fig.width=6, fig.height=3}
+par(mfrow=c(1, 3))
+plot(minAIC_ROC_knn5pc_train,main="ROC Curve de donées train de knn 5pc")
+plot(minAIC_ROC_knn10pc_train,main="ROC Curve de donées train de knn 10pc")
+plot(minAIC_ROC_knn15pc_train,main="ROC Curve de donées train de knn 15pc")
+```
+
+```{r,echo = FALSE,fig.width=6, fig.height=3}
+par(mfrow=c(1, 3))
+plot(minAIC_ROC_moyenne5pc_train,main="ROC Curve de donées train de moyenne 5pc")
+plot(minAIC_ROC_moyenne5pc_train,main="ROC Curve de donées train de moyenne 10pc")
+plot(minAIC_ROC_moyenne5pc_train,main="ROC Curve de donées train de moyenne 15pc")
+par(mfrow=c(1, 1))
+
+```
+**On fait maintenat pour les donées test**
+
+
+**Les ROC courbes pour donées test**
+
+```{r}
+# Dataframes avec ROC_AUC_Youden_Closet
+minAIC_appli_spam_test <- ROC_AUC_Youden_Closet(minAIC_spam_train,spam_test)
+
+minAIC_appli_knn5pc_test <- ROC_AUC_Youden_Closet(minAIC_knn5pc_train,data_impute_knn_5pc_test)
+
+minAIC_appli_knn10pc_test <- ROC_AUC_Youden_Closet(minAIC_knn10pc_train,data_impute_knn_10pc_test)
+
+minAIC_appli_knn15pc_test <- ROC_AUC_Youden_Closet(minAIC_knn15pc_train,data_impute_knn_15pc_test)
+
+minAIC_appli_moyenne5pc_test <- ROC_AUC_Youden_Closet(minAIC_moyenne5pc_train,data_impute_moyenne_5pc_test)
+
+minAIC_appli_moyenne10pc_test <- ROC_AUC_Youden_Closet(minAIC_moyenne10pc_train,data_impute_moyenne_10pc_test)
+
+minAIC_appli_moyenne15pc_test <- ROC_AUC_Youden_Closet(minAIC_moyenne15pc_train,data_impute_moyenne_15pc_test)
+
+
+
+
+
+# Les ROCs
+minAIC_ROC_spam_test <- minAIC_appli_spam_test$ROC
+
+minAIC_ROC_knn5pc_test <- minAIC_appli_knn5pc_test$ROC
+minAIC_ROC_knn10pc_test <- minAIC_appli_knn5pc_test$ROC
+minAIC_ROC_knn15pc_test <- minAIC_appli_knn5pc_test$ROC
+
+minAIC_ROC_moyenne5pc_test <- minAIC_appli_moyenne5pc_test$ROC
+minAIC_ROC_moyenne10pc_test <- minAIC_appli_moyenne5pc_test$ROC
+minAIC_ROC_moyenne15pc_test <- minAIC_appli_moyenne5pc_test$ROC
+
+plot(minAIC_ROC_spam_test,main="ROC Curve de donées test sélectioné par le plus petit AIC entre 3 méthodes de tableua initial")
+```
+
+```{r,echo = FALSE,fig.width=6, fig.height=3}
+par(mfrow=c(1, 3))
+plot(minAIC_ROC_knn5pc_test,main="ROC Curve de donées test de knn 5pc")
+plot(minAIC_ROC_knn10pc_test,main="ROC Curve de donées test de knn 10pc")
+plot(minAIC_ROC_knn15pc_test,main="ROC Curve de donées test de knn 15pc")
+```
+
+```{r,echo = FALSE,fig.width=6, fig.height=3}
+par(mfrow=c(1, 3))
+plot(minAIC_ROC_moyenne5pc_test,main="ROC Curve de donées test de moyenne 5pc")
+plot(minAIC_ROC_moyenne5pc_test,main="ROC Curve de donées test de moyenne 10pc")
+plot(minAIC_ROC_moyenne5pc_test,main="ROC Curve de donées test de moyenne 15pc")
+par(mfrow=c(1, 1))
+
+```
+
